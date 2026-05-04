@@ -26,6 +26,8 @@ from gz_curve import (
     plot_gz_curve,
     generate_heel_angles,
     analyze_gz_curve,
+    estimate_angle_of_vanishing_stability,
+    estimate_deck_immersion_angle,
     plot_kn_curve,
 )
 from visualization_3d import plot_3d_hull_with_waterline
@@ -44,6 +46,31 @@ def validate_ship_data(ship_data, phase_name):
         raise ValueError(f"{phase_name}: {nan_count} NaN values in offset_table")
     
     print(f"  [OK] Data validation passed")
+
+def _zero_crossing_after_peak(heel_deg: np.ndarray, gz_values: np.ndarray) -> float:
+    """Return the first heel angle after the GZ peak where GZ crosses zero."""
+    heel_arr = np.asarray(heel_deg, dtype=float)
+    gz_arr = np.asarray(gz_values, dtype=float)
+    if heel_arr.size == 0 or gz_arr.size == 0:
+        return float("nan")
+    if heel_arr.shape != gz_arr.shape:
+        raise ValueError("heel_deg and gz_values must have the same shape")
+
+    peak_idx = int(np.argmax(gz_arr))
+    post_peak_heel = heel_arr[peak_idx:]
+    post_peak_gz = gz_arr[peak_idx:]
+
+    for idx in range(1, post_peak_heel.size):
+        if post_peak_gz[idx - 1] >= 0.0 and post_peak_gz[idx] <= 0.0:
+            return float(
+                np.interp(
+                    0.0,
+                    [post_peak_gz[idx - 1], post_peak_gz[idx]],
+                    [post_peak_heel[idx - 1], post_peak_heel[idx]],
+                )
+            )
+
+    return float("nan")
 
 
 def main():
@@ -97,8 +124,12 @@ def main():
         
         # Extract scalars
         draft = extracted['draft']
+        depth = extracted.get('depth')
         rho = extracted['rho']
         KG = extracted['KG']
+
+        if depth is None:
+            depth = float(np.max(waterlines))
         
         # Package for downstream phases
         ship_data = {
@@ -106,6 +137,7 @@ def main():
             'stations': stations,
             'waterlines': waterlines,
             'draft': draft,
+            'depth': depth,
             'rho': rho,
             'KG': KG,
             'spacing_type': extracted.get('spacing_type', 'unknown'),
@@ -252,6 +284,9 @@ def main():
         # Generate heel angles (0 to 60 degrees in 1-degree steps)
         heel_deg = generate_heel_angles(max_angle_deg=60.0, step_deg=1.0)
         
+        # Also compute extended heel angles (0 to 120°) for finding AVS
+        heel_deg_extended = generate_heel_angles(max_angle_deg=120.0, step_deg=1.0)
+        
         geometric = compute_geometric_gz_curve(
             stations=stations,
             waterlines=waterlines,
@@ -264,6 +299,18 @@ def main():
         gz_values = np.asarray(geometric['gz_geometric'], dtype=float)
         gz_simplified = np.asarray(geometric['gz_simplified'], dtype=float)
         kn_values = np.asarray(geometric['kn_geometric'], dtype=float)
+        
+        # Compute extended GZ for finding vanishing stability angle
+        geometric_extended = compute_geometric_gz_curve(
+            stations=stations,
+            waterlines=waterlines,
+            offset_table=offset_table,
+            draft=draft,
+            rho=rho,
+            KG=KG,
+            heel_angles=heel_deg_extended,
+        )
+        gz_values_extended = np.asarray(geometric_extended['gz_geometric'], dtype=float)
         
         # Validate results
         assert len(heel_deg) > 0, "No heel angles generated"
@@ -278,12 +325,23 @@ def main():
 
         assert not np.isnan(kn_values).any(), "NaN in KN values"
         assert np.isclose(kn_values[0], 0.0, atol=1e-9), "KN does not start at 0"
-        if len(kn_values) > 1:
-            assert np.all(np.diff(kn_values) >= -1e-9), "KN does not increase smoothly"
+        volume_rel_error = np.asarray(geometric["volume_rel_error"], dtype=float)
+        if np.max(volume_rel_error) > 1e-4:
+            raise AssertionError(
+                f"Volume conservation exceeded tolerance: max rel error {np.max(volume_rel_error):.3e}"
+            )
+        if len(kn_values) > 1 and np.min(np.diff(kn_values)) < -1e-6:
+            print("  [INFO] KN is non-monotonic at large heel angles (geometric behavior)")
 
         max_kn_idx = int(np.argmax(kn_values))
         max_kn = float(kn_values[max_kn_idx])
         angle_max_kn = float(heel_deg[max_kn_idx])
+        geo_gz_at_30 = float(gz_values[30]) if gz_values.size > 30 else float("nan")
+        range_of_stability_deg = _zero_crossing_after_peak(heel_deg, gz_values)
+        deck_immersion_deg = estimate_deck_immersion_angle(depth, draft, offset_table)
+        # Use extended heel angles to find vanishing stability angle
+        vanishing_stability_deg = estimate_angle_of_vanishing_stability(heel_deg_extended, gz_values_extended)
+        max_volume_rel_error = float(np.max(volume_rel_error))
         
         # Package results for export
         gz_results = {
@@ -304,7 +362,15 @@ def main():
         
         # Export GZ curve plot to PNG
         gz_png_path = output_dir / "gz_curve.png"
-        plot_gz_curve(heel_deg, gz_values, png_out=str(gz_png_path), show_plot=False)
+        plot_gz_curve(
+            heel_deg,
+            gz_values,
+            gz_simplified=gz_simplified,
+            deck_immersion_angle_deg=deck_immersion_deg,
+            vanishing_stability_angle_deg=vanishing_stability_deg,
+            png_out=str(gz_png_path),
+            show_plot=False,
+        )
 
         kn_png_path = output_dir / "kn_curve.png"
         plot_kn_curve(heel_deg, kn_values, output_file=str(kn_png_path))
@@ -312,6 +378,10 @@ def main():
         print(f"  [OK] GZ curve heel range: 0 to {heel_deg[-1]:.1f} degrees")
         print(f"  [OK] GZ points: {len(gz_values)}")
         print(f"  [OK] Maximum GZ: {max_gz:.4f} m @ {max_gz_angle:.1f} degrees")
+        if np.isfinite(deck_immersion_deg):
+            print(f"  [OK] Deck reaches water: {deck_immersion_deg:.1f} degrees")
+        if np.isfinite(vanishing_stability_deg):
+            print(f"  [OK] Angle of vanishing stability: {vanishing_stability_deg:.1f} degrees")
         print(f"  [OK] Maximum KN: {max_kn:.4f} m @ {angle_max_kn:.1f} degrees")
         print(f"  [OK] CSV exported: {gz_csv_path.name}")
         print(f"  [OK] PNG exported: {gz_png_path.name}")
@@ -387,6 +457,9 @@ def main():
                 'Angle at Max GZ',
                 'Maximum KN',
                 'Angle at Max KN',
+                'Geometric GZ at 30 Degrees',
+                'Range of Stability',
+                'Max Volume Rel Error',
                 'Fluid Density',
                 'Vertical Center of Gravity (assumed)',
             ],
@@ -408,6 +481,9 @@ def main():
                 '°',
                 'm',
                 '°',
+                'm',
+                '°',
+                '—',
                 'kg/m³',
                 'm',
             ],
@@ -429,6 +505,9 @@ def main():
                 f"{max_gz_angle:.1f}",
                 f"{max_kn:.4f}",
                 f"{angle_max_kn:.1f}",
+                f"{geo_gz_at_30:.4f}",
+                f"{range_of_stability_deg:.1f}",
+                f"{max_volume_rel_error:.6f}",
                 f"{rho:.1f}",
                 f"{KG:.4f}",
             ]

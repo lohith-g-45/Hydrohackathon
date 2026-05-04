@@ -12,6 +12,7 @@ KEYWORDS = {
     "station_spacing": ["station spacing", "spacing station", "station interval", "stn spacing"],
     "waterline_spacing": ["waterline spacing", "wl spacing", "spacing waterline", "waterline interval"],
     "draft": ["draft", "draught"],
+    "depth": ["depth", "moulded depth", "hull depth"],
     "rho": ["rho", "fluid density", "density", "water density"],
     "KG": ["kg", "k.g", "vertical cg", "vcg", "center of gravity", "centre of gravity"],
 }
@@ -501,11 +502,22 @@ def apply_hackathon_assumptions(result: Dict[str, Any]) -> Dict[str, Any]:
     else:
         result["rho_source"] = "dataset"
 
-    # Hackathon assumption: if KG is missing, estimate with KG = 0.5 * Draft.
-    draft = result.get("draft")
-    if result.get("KG") is None and draft is not None:
-        result["KG"] = 0.5 * float(draft)
-        result["KG_source"] = "estimated_from_draft"
+    # Hackathon assumption: if KG is missing, estimate with KG = (2/3) * Depth.
+    depth = result.get("depth")
+    if depth is None:
+        offset = result.get("offset_table")
+        if offset and offset.get("waterlines"):
+            wl = np.asarray(offset.get("waterlines"), dtype=float)
+            wl = wl[np.isfinite(wl)]
+            if wl.size > 0:
+                depth = float(np.max(wl))
+    if depth is None:
+        depth = DEFAULT_SEAWATER_RHO  # fallback
+    result["depth"] = float(depth)
+
+    if result.get("KG") is None:
+        result["KG"] = (2.0 / 3.0) * float(result["depth"])
+        result["KG_source"] = "estimated_from_depth"
     elif result.get("KG") is not None:
         result["KG_source"] = "dataset"
     else:
@@ -513,7 +525,7 @@ def apply_hackathon_assumptions(result: Dict[str, Any]) -> Dict[str, Any]:
 
     result["assumptions"] = {
         "rho": "If rho is missing, assume standard seawater density (1025 kg/m^3).",
-        "KG": "If KG is missing, estimate KG = 0.5 * Draft.",
+        "KG": "If KG is missing, estimate KG = (2.0 / 3.0) * Depth as specified in the problem statement.",
     }
     return result
 
@@ -555,6 +567,7 @@ def extract_ship_data(file_path: str) -> Dict[str, Any]:
         "station_spacing": station_spacing,
         "waterline_spacing": waterline_spacing,
         "draft": scalars["draft"]["value"] if scalars["draft"] else None,
+        "depth": scalars["depth"]["value"] if scalars["depth"] else None,
         "rho": scalars["rho"]["value"] if scalars["rho"] else None,
         "KG": scalars["KG"]["value"] if scalars["KG"] else None,
         "debug": {

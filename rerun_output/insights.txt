@@ -1,0 +1,97 @@
+================================================================================
+SHIP HYDROSTATICS AND STABILITY ANALYSIS REPORT
+Phase 9: Insight Engine
+================================================================================
+
+================================================================================
+1. STABILITY SUMMARY
+================================================================================
+
+Metacentric Height (GM): 1.6300 m
+Classification: STABLE - The vessel exhibits adequate stability with moderate heeling resistance. Normal rolling behavior.
+
+A stable vessel (moderate GM) exhibits balanced rolling behavior. The ship responds appropriately to wave excitation with moderate period oscillations. This provides good balance between crew comfort and ship handling.
+
+A positive GM indicates the ship will return to upright after a disturbance. The larger the GM, the greater the restoring moment and the faster the ship will right itself. However, extremely high GM values lead to harsh rolling motions that reduce crew comfort.
+
+
+================================================================================
+2. HYDROSTATIC SUMMARY
+================================================================================
+
+Draft: 28.5000 m
+Displaced Volume: 552801.5544 m³
+Displacement Mass: 566621593.30 kg (566.62 thousand tonnes)
+
+Waterplane Area (at draft): 21711.1254 m²
+
+Longitudinal Center of Buoyancy (LCB): 208.18 m
+  The LCB is the geometric center of the immersed hull volume. It indicates where the resultant buoyant force acts vertically upward. Position at 208.18 m from the forward reference.
+
+Longitudinal Center of Flotation (LCF): 199.36 m
+  The LCF is the geometric center of the waterplane area (floating surface). It marks the pivot point for longitudinal trim changes. Position at 199.36 m from the forward reference.
+
+Vertical Center of Buoyancy (KB): 15.05 m
+  KB represents the height of the buoyancy center above the keel. At draft 28.50 m, KB is 52.8% of the draft, showing how deeply the weighted volume extends vertically.
+
+Design Insight:
+The waterplane area of 21711 m² establishes the ship's floating footprint. Larger waterplane areas provide greater reserve buoyancy and improved trim stability. The calculated LCB and LCF positions indicate longitudinal load distribution and trim response.
+
+
+================================================================================
+3. GZ CURVE AND RIGHTING MOMENT INTERPRETATION
+================================================================================
+
+The GZ curve represents the righting arm—the perpendicular distance between the lines of action of weight and buoyancy. As a vessel heels, GZ increases initially, then peaks, and eventually decreases.
+
+Optimized run (parameters updated: Depth = 50.56 m, KG = 21.50 m):
+
+- Maximum GZ (within 0–60°): 7.6348 m at heel angle 41.0°
+- Deck reaches water (deck immersion angle): 35.0°
+- Angle of Vanishing Stability (full zero crossing, extended calculation): 102.0°
+
+This peak represents the maximum restoring moment available after optimization. The optimized design shifts the maximum GZ to a safer heel angle and increases initial stability (GM).
+
+Derived KN curve relation used in this project: KN(θ) = GZ(θ) + KG × sin(θ).
+
+- Maximum derived KN (within 0–60°): 25.1265 m at heel angle 60.0°
+
+This KN curve is an approximation derived from the geometric GZ model used here. The optimized run computes geometric GZ across extended heel angles to identify vanishing stability and deck immersion.
+
+Note: The optimized GZ curve uses the geometric computation of the righting arm; comparison to the GM*sin(θ) simplified curve is retained for reference.
+
+
+================================================================================
+4. ASSUMPTIONS AND LIMITATIONS
+================================================================================
+
+Key Assumptions Used in This Analysis:
+
+• Fluid Density (ρ): 1025.0 kg/m³
+  Standard seawater density assumed. If operating in fresh water (ρ ≈ 1000 kg/m³) or salt water with different salinity, GM and displacement will shift.
+
+• Vertical Center of Gravity (KG): 24.8460 m
+  Estimated as 0.5 × Draft (0.5 × 28.50 = 24.85 m).
+  Since actual loading data was not available, this approximation represents a representative cargo distribution. Real KG depends on specific cargo loading, ballast, and consumables.
+
+• Integration Method: Trapezoidal rule with actual (non-uniform) station and waterline spacing.
+  This numerical method integrates over the real geometric data from the ship's lines plan.
+
+• GZ Curve Simplification: GZ(θ) = GM × sin(θ) for heel angles 0–60°.
+  This small-angle approximation provides quick initial stability insight but overestimates GZ at large heel angles. A detailed cross-curve calculation accounting for shifting buoyancy centers would be required for damage stability and regulatory compliance.
+
+• KN Curve Simplification: KN(θ) = GZ(θ) + KG × sin(θ) (derived approximation).
+  This is not a direct geometric KN cross-curve solution. Accurate KN needs buoyancy center recalculation at each heel increment using the heeled waterplane and immersed volume.
+
+
+Limitations:
+
+• Free surface effects: No fluid slack tanks or cargo shift modeled.
+• Dynamic effects: Wave-induced rolling and pitching not included.
+• Nonlinear hydrostatics: GZ curve uses GM approximation; real GZ is nonlinear above ~20° heel.
+• Uncrewed ship assumption: No human factors in stability margin choices.
+
+
+================================================================================
+END OF REPORT
+================================================================================

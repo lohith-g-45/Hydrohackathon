@@ -1,14 +1,31 @@
 """Geometric GZ / KN cross-curve calculations built on heeled hull integration."""
 from __future__ import annotations
 
+import logging
+
 import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
 
 from hydrostatics import compute_phase4
-from Hydrohackathon.hull_geometry import find_heeled_waterplane, heeled_buoyancy_centroid, rotate_hull
+from Hydrohackathon.hull_geometry import (
+    find_heeled_waterplane,
+    heeled_buoyancy_centroid,
+    integrate_heeled_volume,
+    rotate_hull,
+)
 from integration import compute_phase3
 from stability import compute_phase5
+
+logger = logging.getLogger(__name__)
+
+
+def _rotate_back_to_upright(y_heeled: float, z_heeled: float, heel_rad: float) -> tuple[float, float]:
+    cos_theta = float(np.cos(heel_rad))
+    sin_theta = float(np.sin(heel_rad))
+    y_upright = y_heeled * cos_theta + z_heeled * sin_theta
+    z_upright = -y_heeled * sin_theta + z_heeled * cos_theta
+    return float(y_upright), float(z_upright)
 
 
 def _as_1d_float_array(name: str, values) -> NDArray[np.float64]:
@@ -20,28 +37,17 @@ def _as_1d_float_array(name: str, values) -> NDArray[np.float64]:
     return arr
 
 
-def _rotate_back_to_upright(
-    y_heeled: float,
-    z_heeled: float,
-    heel_rad: float,
-) -> tuple[float, float]:
-    cos_theta = float(np.cos(heel_rad))
-    sin_theta = float(np.sin(heel_rad))
-    y_upright = y_heeled * cos_theta + z_heeled * sin_theta
-    z_upright = -y_heeled * sin_theta + z_heeled * cos_theta
-    return float(y_upright), float(z_upright)
-
-
 def compute_geometric_gz_curve(
+    offset_table,
     stations,
     waterlines,
-    offset_table,
-    draft: float,
-    rho: float,
-    KG: float,
     heel_angles,
+    KG: float,
+    draft: float | None = None,
+    rho: float = 1025.0,
+    volume_tol: float = 1e-4,
 ) -> dict[str, np.ndarray | float]:
-    """Compute geometric and simplified GZ / KN curves across heel angles."""
+    """Compute true geometric GZ from submerged heeled geometry."""
     stations_arr = _as_1d_float_array("stations", stations)
     waterlines_arr = _as_1d_float_array("waterlines", waterlines)
     offset_table_arr = np.asarray(offset_table, dtype=float)
@@ -52,11 +58,19 @@ def compute_geometric_gz_curve(
     if np.isnan(offset_table_arr).any():
         raise ValueError("offset_table contains NaN values.")
 
-    draft_value = float(draft)
+    if offset_table_arr.shape != (waterlines_arr.size, stations_arr.size):
+        raise ValueError(
+            "offset_table shape must match (len(waterlines), len(stations)). "
+            f"Got {offset_table_arr.shape}, expected {(waterlines_arr.size, stations_arr.size)}."
+        )
+
+    draft_value = float(waterlines_arr[-1] if draft is None else draft)
     rho_value = float(rho)
     kg_value = float(KG)
-    if np.isnan(draft_value) or np.isnan(rho_value) or np.isnan(kg_value):
-        raise ValueError("draft, rho, and KG must be valid numbers.")
+    if np.isnan(draft_value) or np.isnan(rho_value) or np.isnan(kg_value) or np.isnan(volume_tol):
+        raise ValueError("draft, rho, KG, and volume_tol must be valid numbers.")
+    if volume_tol <= 0.0:
+        raise ValueError("volume_tol must be positive.")
 
     phase3 = compute_phase3(
         stations=stations_arr,
@@ -96,32 +110,65 @@ def compute_geometric_gz_curve(
     waterplane_elevations = np.zeros_like(heel_rad, dtype=float)
     buoyancy_y = np.zeros_like(heel_rad, dtype=float)
     buoyancy_z = np.zeros_like(heel_rad, dtype=float)
+    buoyancy_transverse_arm = np.zeros_like(heel_rad, dtype=float)
+    heeled_volume = np.zeros_like(heel_rad, dtype=float)
+    volume_rel_error = np.zeros_like(heel_rad, dtype=float)
 
     for idx, heel_deg in enumerate(heel_angles_arr):
         heeled_hull = rotate_hull(stations_arr, waterlines_arr, offset_table_arr, float(heel_deg))
         z_wl = find_heeled_waterplane(heeled_hull, upright_volume, tol=1e-4)
+        v_heeled = integrate_heeled_volume(heeled_hull, z_wl)
+        rel_error = abs(v_heeled - upright_volume) / max(abs(upright_volume), 1e-12)
+        if rel_error > volume_tol:
+            raise RuntimeError(
+                f"Volume conservation failed at {heel_deg:.2f} deg: "
+                f"relative error {rel_error:.3e} > tolerance {volume_tol:.3e}."
+            )
+
         y_heeled, z_heeled = heeled_buoyancy_centroid(heeled_hull, z_wl)
         y_upright, z_upright = _rotate_back_to_upright(y_heeled, z_heeled, heel_rad[idx])
 
         gz_geometric[idx] = -(
-            y_upright * np.cos(heel_rad[idx]) + (z_upright - kg_value) * np.sin(heel_rad[idx])
+            y_upright * np.cos(heel_rad[idx])
+            + (z_upright - kg_value) * np.sin(heel_rad[idx])
         )
         kn_geometric[idx] = gz_geometric[idx] + kg_value * np.sin(heel_rad[idx])
+        by_arm = kn_geometric[idx]
         waterplane_elevations[idx] = z_wl
         buoyancy_y[idx] = y_upright
         buoyancy_z[idx] = z_upright
+        buoyancy_transverse_arm[idx] = by_arm
+        heeled_volume[idx] = v_heeled
+        volume_rel_error[idx] = rel_error
+
+    zero_idx = np.where(np.isclose(heel_angles_arr, 0.0, atol=1e-12))[0]
+    if zero_idx.size > 0:
+        gz_zero = float(gz_geometric[int(zero_idx[0])])
+        if abs(gz_zero) > 1e-3:
+            raise RuntimeError(
+                f"Geometric GZ sanity check failed at 0 deg: GZ(0)={gz_zero:.6f} m"
+            )
 
     max_gz_idx = int(np.argmax(gz_geometric))
     max_kn_idx = int(np.argmax(kn_geometric))
+
+    logger.info(
+        "Computed geometric GZ for %d heel angles. max|volume_rel_error|=%.3e",
+        heel_angles_arr.size,
+        float(np.max(volume_rel_error)),
+    )
 
     return {
         "heel_deg": heel_angles_arr.astype(float),
         "heel_rad": heel_rad.astype(float),
         "GM": gm,
         "upright_volume_m3": upright_volume,
+        "heeled_volume_m3": heeled_volume,
+        "volume_rel_error": volume_rel_error,
         "waterplane_elevation": waterplane_elevations,
-        "buoyancy_y_upright": buoyancy_y,
-        "buoyancy_z_upright": buoyancy_z,
+        "buoyancy_y": buoyancy_y,
+        "buoyancy_z": buoyancy_z,
+        "buoyancy_transverse_arm": buoyancy_transverse_arm,
         "gz_geometric": gz_geometric,
         "kn_geometric": kn_geometric,
         "gz_simplified": gz_simplified,
@@ -142,5 +189,9 @@ def geometric_gz_to_frame(df: dict[str, np.ndarray | float]) -> pd.DataFrame:
             "gz_simplified": df["gz_simplified"],
             "kn_geometric": df["kn_geometric"],
             "kn_simplified": df["kn_simplified"],
+            "buoyancy_y": df["buoyancy_y"],
+            "buoyancy_z": df["buoyancy_z"],
+            "buoyancy_transverse_arm": df["buoyancy_transverse_arm"],
+            "volume_rel_error": df["volume_rel_error"],
         }
     )

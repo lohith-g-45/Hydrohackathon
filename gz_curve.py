@@ -77,22 +77,24 @@ def generate_kn_curve(heel_deg: np.ndarray, gz: np.ndarray, KG: float) -> np.nda
 
 
 def compute_geometric_gz_curve(
+    offset_table,
     stations,
     waterlines,
-    offset_table,
-    draft: float,
-    rho: float,
-    KG: float,
     heel_angles,
+    KG: float,
+    draft: float | None = None,
+    rho: float = 1025.0,
+    volume_tol: float = 1e-4,
 ) -> dict[str, np.ndarray | float]:
     return _compute_geometric_gz_curve(
+        offset_table=offset_table,
         stations=stations,
         waterlines=waterlines,
-        offset_table=offset_table,
+        heel_angles=heel_angles,
+        KG=KG,
         draft=draft,
         rho=rho,
-        KG=KG,
-        heel_angles=heel_angles,
+        volume_tol=volume_tol,
     )
 
 
@@ -109,6 +111,71 @@ def analyze_gz_curve(heel_deg: np.ndarray, gz: np.ndarray) -> Dict[str, float]:
         "max_gz": float(gz_arr[i_max]),
         "angle_at_max_gz": float(heel_deg_arr[i_max]),
     }
+
+
+def estimate_angle_of_vanishing_stability(heel_deg: np.ndarray, gz: np.ndarray) -> float:
+    """Estimate the first angle after the GZ peak where GZ returns to zero."""
+    heel_deg_arr = np.asarray(heel_deg, dtype=float)
+    gz_arr = np.asarray(gz, dtype=float)
+
+    if heel_deg_arr.shape != gz_arr.shape:
+        raise ValueError("heel_deg and gz must have the same shape.")
+    if heel_deg_arr.ndim != 1 or heel_deg_arr.size == 0:
+        raise ValueError("heel_deg and gz must be non-empty 1D arrays.")
+
+    peak_idx = int(np.argmax(gz_arr))
+    post_peak_heel = heel_deg_arr[peak_idx:]
+    post_peak_gz = gz_arr[peak_idx:]
+
+    for idx in range(1, post_peak_heel.size):
+        left_gz = float(post_peak_gz[idx - 1])
+        right_gz = float(post_peak_gz[idx])
+        if left_gz >= 0.0 and right_gz <= 0.0:
+            return float(
+                np.interp(
+                    0.0,
+                    [left_gz, right_gz],
+                    [float(post_peak_heel[idx - 1]), float(post_peak_heel[idx])],
+                )
+            )
+
+    return float("nan")
+
+
+def estimate_deck_immersion_angle(
+    depth: float | None,
+    draft: float | None,
+    offset_table: np.ndarray | None = None,
+) -> float:
+    """Estimate the heel angle where the deck edge first reaches the water.
+
+    This uses the available freeboard and the maximum half-breadth from the
+    offset table as a practical deck-edge proxy.
+    """
+    if depth is None or draft is None:
+        return float("nan")
+
+    depth_val = float(depth)
+    draft_val = float(draft)
+    if np.isnan(depth_val) or np.isnan(draft_val):
+        return float("nan")
+
+    freeboard = max(depth_val - draft_val, 0.0)
+    if freeboard <= 0.0:
+        return 0.0
+
+    if offset_table is None:
+        return float("nan")
+
+    offsets_arr = np.asarray(offset_table, dtype=float)
+    if offsets_arr.size == 0:
+        return float("nan")
+
+    half_breadth = float(np.nanmax(offsets_arr))
+    if not np.isfinite(half_breadth) or half_breadth <= 0.0:
+        return float("nan")
+
+    return float(np.degrees(np.arctan2(freeboard, half_breadth)))
 
 
 def estimate_range_of_stability(gm: float, search_step_deg: float = 0.1) -> float:
@@ -153,13 +220,55 @@ def validate_gz_behavior(heel_deg: np.ndarray, gz: np.ndarray) -> Dict[str, bool
     }
 
 
-def plot_gz_curve(heel_deg: np.ndarray, gz: np.ndarray, png_out: str | None = None, show_plot: bool = True) -> None:
+def plot_gz_curve(
+    heel_deg: np.ndarray,
+    gz: np.ndarray,
+    gz_simplified: np.ndarray | None = None,
+    deck_immersion_angle_deg: float | None = None,
+    vanishing_stability_angle_deg: float | None = None,
+    png_out: str | None = None,
+    show_plot: bool = True,
+) -> None:
     plt.figure(figsize=(9, 5))
-    plt.plot(heel_deg, gz, linewidth=2)
+    plt.plot(heel_deg, gz, linewidth=2.5, label="True Geometric GZ")
+    if gz_simplified is not None:
+        plt.plot(
+            heel_deg,
+            np.asarray(gz_simplified, dtype=float),
+            linestyle="--",
+            linewidth=1.8,
+            label="GM*sin(theta) comparison",
+            alpha=0.9,
+        )
+    if deck_immersion_angle_deg is not None and np.isfinite(deck_immersion_angle_deg):
+        plt.axvline(
+            float(deck_immersion_angle_deg),
+            color="tab:orange",
+            linestyle=":",
+            linewidth=2.0,
+            label=f"Deck reaches water @ {deck_immersion_angle_deg:.1f}°",
+        )
+    if vanishing_stability_angle_deg is not None and np.isfinite(vanishing_stability_angle_deg):
+        plt.axvline(
+            float(vanishing_stability_angle_deg),
+            color="tab:red",
+            linestyle="--",
+            linewidth=2.0,
+            label=f"Angle of vanishing stability @ {vanishing_stability_angle_deg:.1f}°",
+        )
+    
+    # Extend x-axis if needed to show AVS marker
+    heel_max = float(heel_deg[-1])
+    x_lim_max = heel_max
+    if vanishing_stability_angle_deg is not None and np.isfinite(vanishing_stability_angle_deg):
+        x_lim_max = max(x_lim_max, float(vanishing_stability_angle_deg) * 1.05)
+    plt.xlim(0, x_lim_max)
+    
     plt.xlabel("Heel angle (deg)")
     plt.ylabel("GZ (m)")
-    plt.title("GZ Curve")
+    plt.title("GZ Curve (True Geometric vs GM Approximation)")
     plt.grid(True, linestyle="--", alpha=0.6)
+    plt.legend(loc="best")
     plt.tight_layout()
 
     if png_out:
@@ -380,7 +489,13 @@ def main() -> None:
     assert isinstance(gz, np.ndarray)
 
     export_gz_csv(csv_out, heel_deg, gz)
-    plot_gz_curve(heel_deg, gz, png_out=png_out, show_plot=not args.no_plot)
+    plot_gz_curve(
+        heel_deg,
+        gz,
+        gz_simplified=np.asarray(results["gz_simplified"], dtype=float),
+        png_out=png_out,
+        show_plot=not args.no_plot,
+    )
 
     print_phase6_results(results)
     print("\nArtifacts:")
