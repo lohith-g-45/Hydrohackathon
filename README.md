@@ -1,61 +1,103 @@
-# HydroHackathon Run Guide
+# HydroHackathon — Ship Stability Analysis & Offset Optimizer
 
-## 0. Prerequisites (install first)
+An interactive ship stability toolkit built for HydroHackathon. Computes hydrostatics, GZ curves, and runs constrained offset optimization to meet stability criteria.
 
-- Python 3.9+ (recommended: Python 3.11)
-- pip (Python package installer)
+---
 
-Install required packages:
+## Quick Start (Streamlit UI — recommended)
 
-py -3 -m pip install pandas numpy matplotlib plotly
+### 1. Clone the repository
 
-If `py` is not available:
+```bash
+git clone https://github.com/raviasha/HYDROHACKATHON.git
+cd HYDROHACKATHON
+```
 
-python -m pip install pandas numpy matplotlib plotly
+### 2. Create and activate a virtual environment
 
-## 1. Open a terminal in the project folder
+**macOS / Linux**
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
 
-Project folder:
+**Windows (PowerShell)**
+```powershell
+py -3 -m venv .venv
+.venv\Scripts\Activate.ps1
+```
 
-D:\HYDROHACKATHON
+### 3. Install dependencies
 
-## 2. Run the pipeline (default output in current folder)
+```bash
+pip install -r requirements.txt
+```
 
-Use this command:
+### 4. Launch the Streamlit app
 
-py -3 main.py "HYDRO HACKATHON DATA.xlsx"
+```bash
+streamlit run interactive_ui.py
+```
 
-If `py` is not available, use:
+The app opens automatically in your browser at **http://localhost:8501**.
 
+If it does not open automatically, navigate to that URL manually.
+
+---
+
+## What's in the UI
+
+| Tab | Description |
+|-----|-------------|
+| **Stability Explorer** | Upload offsets CSV, set draft / KG / density, run full hydrostatics pipeline |
+| **KN → GZ Transform** | Convert KN table to GZ curve for a given KG |
+| **Benchmark Validation** | Run and visualise benchmark test results |
+| **Volume Validation** | Verify displaced volume conservation across waterlines |
+| **Offset Optimizer** | Constrained optimisation — maximise GZ while satisfying minimum GZ and area-under-GZ stability criteria |
+
+---
+
+## Input file format
+
+Upload a CSV with half-breadth offsets (metres). Rows = waterlines, Columns = stations.
+
+Example (`offsetdata.csv` included in repo):
+
+```
+wl\stn, 0, 1, 2, ...
+0.0,    0, 0, 0, ...
+0.5,    1, 1, 1, ...
+...
+```
+
+---
+
+## Command-line pipeline (alternative)
+
+```bash
 python main.py "HYDRO HACKATHON DATA.xlsx"
+# or with a custom output directory:
+python main.py "HYDRO HACKATHON DATA.xlsx" --output-dir results
+```
 
-## 3. Run with a custom output directory
+Core outputs: `results.csv`, `gz_curve.png`, `hull_3d.html`, `insights.txt`
 
-Example:
+Open `hull_3d.html` in a browser to view the 3D hull visualisation.
 
-py -3 main.py "HYDRO HACKATHON DATA.xlsx" --output-dir results
+---
 
-## 4. Expected core outputs
+## Requirements
 
-After a successful run, you should see these files generated:
+- Python 3.9+ (Python 3.11 recommended)
+- Dependencies listed in `requirements.txt` (numpy, scipy, streamlit, plotly, pandas, …)
 
-- results.csv
-- gz_curve.png
-- hull_3d.html
-- insights.txt
+---
 
-Note on 3D output:
+## Common issues
 
-- `hull_3d.html` is not a command/script to run.
-- Open it in your browser after pipeline execution (double-click it, or run `start hull_3d.html` on Windows).
-
-Advanced optional outputs (if polygon generation succeeds):
-
-- real_kn_polygon.png
-- real_gz_polygon_physical.png
-
-## 5. Common issues
-
-- If you get "file not found", check that `HYDRO HACKATHON DATA.xlsx` is in the same folder.
-- If Python is not recognized, install Python 3 and reopen terminal.
-- If output files do not appear, check the terminal for error messages from each phase.
+| Issue | Fix |
+|-------|-----|
+| `streamlit: command not found` | Run `pip install streamlit` inside your activated venv |
+| Port 8501 already in use | Run `streamlit run interactive_ui.py --server.port 8502` |
+| `ModuleNotFoundError` | Ensure venv is activated and `pip install -r requirements.txt` completed without errors |
+| Excel file not found (CLI mode) | Make sure the `.xlsx` file is in the same folder as `main.py` |
