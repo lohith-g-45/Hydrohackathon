@@ -1,0 +1,49 @@
+
+<Ship information>
+
+KCS: KRISO 3600TEU Container Ship(F1+A2) - ks621
+     Lpp: 230m, Beam: 32.2m, Draft: 10.8m, Cb= 0.6505, Vs: 24 knots
+
+<Scale ratio>
+
+KCS: 31.5994
+
+
+<Offset file>
+
+kcs.fix : body plan
+kcs.prf: centerline profile
+
+
+<Variable description>
+
+all variables are in meters for full scale ships.
+
+(body plan)
+xlongi: distance from A.P.(stern rudder stock)
+        (i.e., xlongi=0 at A.P., xlongi=Lpp at F.P.)
+height: waterline height from base line
+        (i.e., height=0 at keel line of midship)
+breadth: half breadth at xlongi and height
+        (i.e., breadth=0 at center plane)
+inum: number of station, where offset points are given
+jnum(i): number of points at a station
+
+      read(12,'(a50)')shipname
+      read(12,*)inum
+      do i=1,inum
+        read(12,*)xlongi(i),jnum(i)
+        read(12,*)(breadth(i,j),j=1,jnum(i))
+        read(12,*)(height(i,j),j=1,jnum(i))
+      enddo
+
+(centerline profile)
+xprof: longitudinal position
+       (i.e., xprof=0 at A.P,, xprof=Lpp at F,P,)
+zprof: profile height from base line
+iaf: number of centerline profile points
+
+      read(13,*)iaf
+      read(13,*)(xprof(i),i=1,iaf)
+      read(13,*)(zprof(i),i=1,iaf)
+

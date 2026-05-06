@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).parent / "Hydrohackathon"))
 import numpy as np
 import pandas as pd
 
-from shipd_converter import (
+from shipd_benchmark_converter import (
     hull_to_offset_table,
     extract_hull_metadata,
     save_benchmark_sample,
@@ -84,6 +84,7 @@ def run_simple_benchmark(input_csv: str, out_dir: str, n_hulls: int = 5):
                 metadata["rho"]
             )
             KB_coarse = phase4_coarse["KB"]
+            LCB_coarse = phase4_coarse["LCB"]
             
             # Compute BM
             breadths_coarse = extract_draft_breadths(stations_coarse, waterlines_coarse, offsets_coarse, metadata["draft"])
@@ -113,6 +114,7 @@ def run_simple_benchmark(input_csv: str, out_dir: str, n_hulls: int = 5):
                 metadata["rho"]
             )
             KB_fine = phase4_fine["KB"]
+            LCB_fine = phase4_fine["LCB"]
             
             # Compute BM
             breadths_fine = extract_draft_breadths(stations_fine, waterlines_fine, offsets_fine, metadata["draft"])
@@ -145,6 +147,10 @@ def run_simple_benchmark(input_csv: str, out_dir: str, n_hulls: int = 5):
                 "V_fine": float(V_fine),
                 "GM_coarse": float(GM_coarse),
                 "GM_fine": float(GM_fine),
+                "KB_coarse": float(KB_coarse),
+                "KB_fine": float(KB_fine),
+                "LCB_coarse": float(LCB_coarse),
+                "LCB_fine": float(LCB_fine),
             })
             
         except Exception as e:
@@ -227,6 +233,7 @@ if __name__ == "__main__":
             metadata["rho"]
         )
         KB_coarse = phase4_coarse["KB"]
+        LCB_coarse = phase4_coarse["LCB"]
         
         breadths_coarse = extract_draft_breadths(stations_coarse, waterlines_coarse, offsets_coarse, metadata["draft"])
         IT_coarse = compute_IT(stations_coarse, breadths_coarse)
@@ -255,6 +262,7 @@ if __name__ == "__main__":
             metadata["rho"]
         )
         KB_fine = phase4_fine["KB"]
+        LCB_fine = phase4_fine["LCB"]
         
         breadths_fine = extract_draft_breadths(stations_fine, waterlines_fine, offsets_fine, metadata["draft"])
         IT_fine = compute_IT(stations_fine, breadths_fine)
@@ -291,6 +299,10 @@ if __name__ == "__main__":
             "V_fine": [V_fine],
             "GM_coarse": [GM_coarse],
             "GM_fine": [GM_fine],
+            "KB_coarse": [KB_coarse],
+            "KB_fine": [KB_fine],
+            "LCB_coarse": [LCB_coarse],
+            "LCB_fine": [LCB_fine],
         }
         summary_df = pd.DataFrame(summary_data)
         summary_csv = out_path / "hull_420_test.csv"

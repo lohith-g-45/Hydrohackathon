@@ -83,6 +83,7 @@ def compute_geometric_gz_curve(
     heel_angles,
     KG: float,
     draft: float | None = None,
+    depth: float | None = None,
     rho: float = 1025.0,
     volume_tol: float = 1e-4,
 ) -> dict[str, np.ndarray | float]:
@@ -93,6 +94,7 @@ def compute_geometric_gz_curve(
         heel_angles=heel_angles,
         KG=KG,
         draft=draft,
+        depth=depth,
         rho=rho,
         volume_tol=volume_tol,
     )
@@ -350,6 +352,7 @@ def run_phase6(excel_file: str, step_deg: float, max_angle_deg: float) -> Dict[s
     draft = extracted.get("draft")
     rho = extracted.get("rho")
     kg = extracted.get("KG")
+    depth = extracted.get("depth")
 
     if stations is None or waterlines is None or offset_table_clean is None:
         raise ValueError("stations/waterlines/offset_table_clean are missing.")
@@ -395,6 +398,7 @@ def run_phase6(excel_file: str, step_deg: float, max_angle_deg: float) -> Dict[s
         waterlines=waterlines,
         offset_table=offset_table_clean,
         draft=float(draft),
+        depth=float(depth) if depth is not None else None,
         rho=float(rho),
         KG=float(kg),
         heel_angles=heel_deg,

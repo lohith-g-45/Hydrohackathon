@@ -22,6 +22,47 @@ OFFSET_HINTS = ["offset", "offsets", "half-breadth", "half breadth", "breadth", 
 DEFAULT_SEAWATER_RHO = 1025.0
 
 
+def validate_offset_csv(csv_path: str) -> None:
+    """Validate offset CSV file shape and data sanity."""
+    path = str(csv_path)
+    p = pd.io.common.file_exists(path)
+    if not p:
+        raise FileNotFoundError(path)
+
+    df = pd.read_csv(path, index_col=0)
+    if df.empty:
+        raise ValueError("Offset CSV is empty.")
+
+    arr = df.to_numpy(dtype=float)
+    if np.isnan(arr).any():
+        raise ValueError("Offset CSV contains NaN values.")
+    if (arr < 0.0).any():
+        raise ValueError("Negative half-breadths are not allowed in offset CSV.")
+
+
+def load_offsets_from_csv(csv_path: str) -> Dict[str, Any]:
+    """Load offset table from CSV and return a ship-data compatible dict."""
+    validate_offset_csv(csv_path)
+    df = pd.read_csv(csv_path, index_col=0)
+
+    stations = np.asarray(df.columns, dtype=float)
+    waterlines = np.asarray(df.index, dtype=float)
+    offsets = df.to_numpy(dtype=float)
+
+    draft = float(np.max(waterlines) * 0.5) if waterlines.size else 0.0
+    depth = float(np.max(waterlines)) if waterlines.size else 0.0
+    kg = (2.0 / 3.0) * depth if depth > 0 else 0.0
+
+    return {
+        "stations": stations,
+        "waterlines": waterlines,
+        "offset_table": offsets,
+        "draft": float(draft),
+        "rho": float(DEFAULT_SEAWATER_RHO),
+        "KG": float(kg),
+    }
+
+
 def normalize_text(value: Any) -> str:
     if value is None:
         return ""

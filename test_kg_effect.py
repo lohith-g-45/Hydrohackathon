@@ -32,6 +32,7 @@ for kg_test in [24.846, 24.0, 23.0, 22.0, 21.0, 20.0]:
             heel_angles=heel_deg,
             KG=kg_test,
             draft=draft,
+            depth=depth,
             rho=rho,
         )
         gz_values = np.asarray(geo['gz_geometric'], dtype=float)

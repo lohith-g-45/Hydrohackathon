@@ -40,6 +40,7 @@ def test_tab3_benchmark_section(page):
     if page.get_by_text("No benchmark summary found").count() > 0:
         assert page.get_by_text("No benchmark summary found").is_visible()
     else:
+        assert page.get_by_text("Select hull sample").is_visible()
         assert page.locator("div[data-testid='stDataFrame']").count() >= 1
 
 
@@ -48,3 +49,9 @@ def test_tab4_optimizer_form(page):
     page.get_by_role("tab", name="Offset Optimizer").click()
     page.get_by_role("button", name="Run Optimization").wait_for(state="visible")
     assert page.get_by_role("button", name="Run Optimization").is_visible()
+    
+    # Verify constraint form elements are present
+    assert page.get_by_text("Target heel angle").count() > 0
+    assert page.get_by_text("Max half-breadth perturbation").count() > 0
+    assert page.get_by_text("Minimum GZ Constraints").count() > 0
+    assert page.get_by_text("Min area under GZ").count() > 0

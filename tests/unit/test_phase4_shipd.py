@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from shipd_converter import (
+from shipd_benchmark_converter import (
     select_diverse_hulls,
     hull_to_offset_table,
     extract_hull_metadata,
@@ -86,9 +86,10 @@ class TestShipDConverter:
         """Sample 45-element design vector."""
         v = np.zeros(45)
         v[0] = 150.0  # LOA
-        v[1] = 25.0   # Beam
-        v[2] = 1.0    # Breadth factor
-        v[6] = 15.0   # Depth
+        v[3] = 0.2    # Bd / LOA
+        v[4] = 0.1    # Dd / LOA
+        v[5] = 1.0    # Bs ratio
+        v[6] = 0.7    # WL / Dd
         return v
 
     def test_select_diverse_hulls_returns_n(self, tmp_path):

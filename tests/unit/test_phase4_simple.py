@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from shipd_converter import (
+from shipd_benchmark_converter import (
     select_diverse_hulls,
     hull_to_offset_table,
     extract_hull_metadata,
